@@ -1,9 +1,12 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::collections::HashMap;
+use std::fmt;
 
 use walkdir;
+use serde;
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Entry {
     /// The path of this Entry relative to the indexed path
     relative_path: PathBuf,
@@ -18,6 +21,45 @@ pub struct Entry {
 pub enum ChunkError {
     NoParent,
     NoFileName,
+    DuplicateChunk(PathBuf),
+}
+
+impl fmt::Display for ChunkError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            // TODO(richo) None of this is super useful without context
+            ChunkError::NoParent => write!(f, "Parent directory does not exist"),
+            ChunkError::NoFileName => write!(f, "File name does not exist"),
+            ChunkError::DuplicateChunk(path) => write!(f, "Duplicate chunk: {:?}", path),
+        }
+    }
+}
+
+impl std::error::Error for ChunkError {}
+
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct Db {
+    entries: HashMap<PathBuf, Entry>,
+}
+
+impl Db {
+    pub fn insert(&mut self, entry: Entry) -> Result<(), ChunkError> {
+        // TODO(richo) make it give back on failure?
+        let error_path = entry.relative_path.clone();
+        if let Some(_) = self.entries.insert(entry.chunk.as_os_str().into(), entry) {
+            return Err(ChunkError::DuplicateChunk(error_path));
+        }
+
+        Ok(())
+    }
+
+    pub fn write_to_file<F: std::io::Write>(&mut self, fh: F) -> Result<(), serde_json::Error> {
+        serde_json::to_writer(fh, self)
+    }
+
+    pub fn read_from_file<F: std::io::Read>(fh: F) -> Result<Self, serde_json::Error> {
+        serde_json::from_reader(fh)
+    }
 }
 
 fn create_chunk(path: &Path) -> Result<PathBuf, ChunkError> {
