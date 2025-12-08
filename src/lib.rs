@@ -7,6 +7,8 @@ use std::ffi::OsString;
 use walkdir;
 use serde;
 
+const SIGNIFICANT_CHUNKS: usize = 2;
+
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Entry {
     /// The path of this Entry relative to the indexed path
@@ -38,9 +40,19 @@ impl fmt::Display for ChunkError {
 
 impl std::error::Error for ChunkError {}
 
-#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Db {
+    significant_chunks: usize,
     entries: HashMap<PathBuf, Entry>,
+}
+
+impl Default for Db {
+    fn default() -> Self {
+        Db {
+            significant_chunks: SIGNIFICANT_CHUNKS,
+            entries: Default::default(),
+        }
+    }
 }
 
 impl Db {
@@ -65,8 +77,22 @@ impl Db {
 
 fn create_chunk(path: &Path) -> Result<PathBuf, ChunkError> {
     let mut out = PathBuf::new();
-    // I think? Write some tests?
-    out.push(path.parent().ok_or(ChunkError::NoParent)?.file_name().ok_or(ChunkError::NoParent)?);
+    let mut parts = Vec::with_capacity(SIGNIFICANT_CHUNKS);
+    let mut cur = path;
+
+    for _ in 0..SIGNIFICANT_CHUNKS {
+        let parent = match cur.parent() {
+            Some(par) => par,
+            None => break,
+        };
+        parts.push(parent.file_name().ok_or(ChunkError::NoParent)?);
+        cur = parent;
+    }
+
+    while let Some(part) = parts.pop() {
+        out.push(part);
+    }
+
     out.push(path.file_name().ok_or(ChunkError::NoFileName)?);
     Ok(out)
 }
