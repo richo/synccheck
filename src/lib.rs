@@ -9,10 +9,10 @@ use serde;
 
 const SIGNIFICANT_CHUNKS: usize = 2;
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
 pub struct Entry {
     /// The path of this Entry relative to the indexed path
-    relative_path: PathBuf,
+    pub relative_path: PathBuf,
     /// The chunked path, safe for comparison against another index path
     chunk: PathBuf,
     /// The file's size- not as affective as checksumming but doesn't require reading the whole
@@ -38,7 +38,44 @@ impl fmt::Display for ChunkError {
     }
 }
 
+#[derive(Debug)]
+pub enum DiffError {
+    MismatchedChunks,
+}
+
+impl fmt::Display for DiffError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            // TODO(richo) None of this is super useful without context
+            DiffError::MismatchedChunks => write!(f, "Diff files have different chunk size"),
+        }
+    }
+}
+
+
 impl std::error::Error for ChunkError {}
+impl std::error::Error for DiffError {}
+
+#[derive(Debug, Default)]
+pub struct DbDiffs {
+    missing: Vec<Entry>,
+    mismatched_size: Vec<Entry>,
+}
+
+impl DbDiffs {
+    pub fn out_of_sync(&self) -> bool {
+        return self.missing.len() > 0 ||
+            self.mismatched_size.len() > 0;
+    }
+
+    pub fn missing(&self) -> &[Entry] {
+        &self.missing[..]
+    }
+
+    pub fn mismatched_size(&self) -> &[Entry] {
+        &self.mismatched_size[..]
+    }
+}
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Db {
@@ -64,6 +101,26 @@ impl Db {
         }
 
         Ok(())
+    }
+
+    pub fn diffs_from(&self, other: &Self) -> Result<DbDiffs, DiffError> {
+        // TODO(richo) I think in theory we could still try to compare these
+        if self.significant_chunks != other.significant_chunks {
+            Err(DiffError::MismatchedChunks)?;
+        }
+
+        let mut diffs = DbDiffs::default();
+        for (_, entry) in other.entries.iter() {
+            if let Some(v) = self.entries.get(&entry.chunk) {
+                if v.size != entry.size {
+                    diffs.mismatched_size.push(entry.to_owned());
+                }
+            } else {
+                diffs.missing.push(entry.to_owned());
+            }
+        }
+
+        Ok(diffs)
     }
 
     pub fn write_to_file<F: std::io::Write>(&mut self, fh: F) -> Result<(), serde_json::Error> {
