@@ -9,12 +9,20 @@ struct Args {
 
     #[arg(short, long)]
     output_file: Option<PathBuf>,
+
+    #[arg(short='x', long)]
+    exclude: Vec<String>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    let iter = synccheck::walk(args.path);
+    // TODO(richo) better ergos
+    let cfg = synccheck::WalkerConfig {
+        exclude: args.exclude,
+    };
+
+    let iter = synccheck::walk(args.path, cfg);
 
     let mut db = synccheck::Db::default();
 
@@ -27,7 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             db.write_to_file(std::io::stdout())?;
         },
         Some(path) => {
-            let mut fh = std::fs::File::create(path)?;
+            let fh = std::fs::File::create(path)?;
             db.write_to_file(fh)?;
         }
     }

@@ -1,7 +1,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::ffi::OsString;
 
 use walkdir;
 use serde;
@@ -70,12 +71,25 @@ fn create_chunk(path: &Path) -> Result<PathBuf, ChunkError> {
     Ok(out)
 }
 
-pub fn walk<T: AsRef<Path>>(path: T) -> impl Iterator<Item=Entry> {
+#[derive(Default)]
+pub struct WalkerConfig {
+    pub exclude: Vec<String>,
+}
+
+pub fn walk<T: AsRef<Path>>(path: T, cfg: WalkerConfig) -> impl Iterator<Item=Entry> {
+    let WalkerConfig {
+        exclude,
+    } = cfg;
+
+    let excludes = HashSet::<OsString, std::hash::RandomState>::from_iter(exclude.iter().map(|i| i.into()));
+
     walkdir::WalkDir::new(path)
         .into_iter()
         // TODO(richo) ??
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
+        .filter(|e| e.file_type().is_file())
+        .filter(move |e| !excludes.contains(e.file_name()))
         .map(|e| e.path().try_into())
         // TODO(richo) ??
         .filter_map(|e| e.ok())
