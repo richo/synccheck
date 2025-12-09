@@ -20,7 +20,7 @@ pub struct Entry {
     size: u64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ChunkError {
     NoParent,
     NoFileName,
@@ -38,7 +38,7 @@ impl fmt::Display for ChunkError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum DiffError {
     MismatchedChunks,
 }
@@ -202,5 +202,20 @@ impl TryInto<Entry> for PathBuf {
             chunk: create_chunk(&self).unwrap(),
             size: metadata.len(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+
+    #[test]
+    fn test_deep_chunk() {
+        let pb = PathBuf::from("/root/thing/whatever/file.txt");
+        assert_eq!(
+            create_chunk(&pb),
+            Ok(PathBuf::from("thing/whatever/file.txt"))
+        );
     }
 }
