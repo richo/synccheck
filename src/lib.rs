@@ -171,7 +171,6 @@ pub fn walk<T: AsRef<Path>>(path: T, cfg: WalkerConfig) -> impl Iterator<Item=En
         // TODO(richo) ??
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
-        .filter(|e| e.file_type().is_file())
         .filter(move |e| !excludes.contains(e.file_name()))
         .map(|e| e.path().try_into())
         // TODO(richo) ??
